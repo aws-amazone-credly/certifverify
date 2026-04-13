@@ -1,0 +1,56 @@
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import Header from "../components/Header";
+import CertCard from "../components/CertCard";
+import { verifyCertificate } from "../lib/api";
+
+export default function Verify() {
+  const { code } = useParams();
+  const [result, setResult]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    verifyCertificate(code)
+      .then(setResult)
+      .catch(() => setError("Impossible de contacter le serveur."))
+      .finally(() => setLoading(false));
+  }, [code]);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-12">
+        <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600 mb-8 transition-colors">
+          ← Nouvelle vérification
+        </Link>
+
+        <h2 className="font-display font-bold text-2xl text-slate-800 mb-6">
+          Résultat — <span className="font-mono text-brand-600 text-xl">{code}</span>
+        </h2>
+
+        {loading && (
+          <div className="flex items-center justify-center py-24 text-slate-400">
+            <svg className="animate-spin h-8 w-8 mr-3" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+              <path fill="currentColor" className="opacity-75"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Vérification en cours…
+          </div>
+        )}
+
+        {error && (
+          <div className="text-center py-16 text-red-500">
+            <span className="text-4xl">⚠️</span>
+            <p className="mt-3 font-medium">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && result && <CertCard result={result} />}
+      </main>
+    </div>
+  );
+}

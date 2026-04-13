@@ -1,0 +1,36 @@
+import { createContext, useContext, useState } from "react";
+
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? "certverify@admin2025";
+const SESSION_KEY    = "certverify_admin";
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [authed, setAuthed] = useState(
+    () => sessionStorage.getItem(SESSION_KEY) === "1"
+  );
+
+  function login(password) {
+    if (password === ADMIN_PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, "1");
+      setAuthed(true);
+      return true;
+    }
+    return false;
+  }
+
+  function logout() {
+    sessionStorage.removeItem(SESSION_KEY);
+    setAuthed(false);
+  }
+
+  return (
+    <AuthContext.Provider value={{ authed, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}

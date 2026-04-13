@@ -1,0 +1,209 @@
+import { useEffect, useRef } from "react";
+import QRCodeStyling from "qr-code-styling";
+
+// --- Badge de statut affiché dans l'en-tête de la carte ---
+function StatusBadge({ valid, cert }) {
+  if (!valid && cert?.status === "revoked")
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium font-mono
+        bg-red-950 text-red-400 border border-red-900">
+        Revoked
+      </span>
+    );
+  if (!valid && cert?.expiresAt)
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium font-mono
+        bg-orange-950 text-orange-400 border border-orange-900">
+        Expired
+      </span>
+    );
+  if (!valid)
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium font-mono
+        bg-red-950 text-red-400 border border-red-900">
+        Not Found
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono
+      bg-emerald-950 text-emerald-400 border border-emerald-900">
+      ✓ Valid
+    </span>
+  );
+}
+
+// --- Formate un timestamp Firestore ou une date JS en date lisible ---
+function formatDate(val) {
+  if (!val) return "—";
+  const d = val?.toDate
+    ? val.toDate()
+    : new Date(val._seconds ? val._seconds * 1000 : val);
+  return d.toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+// --- Ligne de champ : label + valeur, style dark dashboard ---
+function Field({ label, value, mono = false }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-0.5 font-mono">
+        {label}
+      </p>
+      <p className={`text-sm text-slate-300 ${mono ? "font-mono text-indigo-400 tracking-wide" : "font-medium"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// --- QR Code stylisé avec logo central via qr-code-styling ---
+function CertQRCode({ verifyCode, logoUrl }) {
+  const containerRef = useRef(null);
+  const qrInstanceRef = useRef(null);
+
+  useEffect(() => {
+    // Construction de l'URL de vérification encodée dans le QR
+    const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify/${verifyCode}`;
+
+    // Création de l'instance avec thème sombre et points arrondis indigo
+    qrInstanceRef.current = new QRCodeStyling({
+      width: 100,
+      height: 100,
+      data: verifyUrl,
+      // Logo au centre : badge du certificat si disponible
+      image: logoUrl || undefined,
+      dotsOptions: {
+        color: "#818cf8",     // indigo-400 — cohérent avec la charte dark
+        type: "rounded",
+      },
+      cornersSquareOptions: {
+        color: "#6366f1",     // indigo-500 pour les coins
+        type: "extra-rounded",
+      },
+      cornersDotOptions: {
+        color: "#a5b4fc",     // indigo-300 pour les points de coin
+      },
+      backgroundOptions: {
+        color: "#0d1117",     // fond quasi-noir pour s'intégrer au dark
+      },
+      imageOptions: {
+        crossOrigin: "anonymous",
+        margin: 4,            // espace entre le logo et les points du QR
+        imageSize: 0.28,      // logo occupe ~28% de la surface
+      },
+    });
+
+    // Injection dans le DOM après nettoyage pour éviter les doublons
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+      qrInstanceRef.current.append(containerRef.current);
+    }
+  }, [verifyCode, logoUrl]);
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      {/* Conteneur avec border subtil pour encadrer le QR sur fond dark */}
+      <div
+        ref={containerRef}
+        className="rounded-xl overflow-hidden border border-slate-800 p-2 bg-[#0d1117]"
+      />
+      <p className="text-[10px] font-mono text-slate-500 tracking-wide">
+        Scan to verify
+      </p>
+    </div>
+  );
+}
+
+// --- Carte principale du certificat — design dark dashboard américain ---
+export default function CertCard({ result }) {
+  const { valid, cert, message } = result;
+
+  return (
+    <div className="
+      rounded-2xl border border-slate-800 p-7 max-w-2xl mx-auto
+      bg-[#0d0f14] shadow-2xl shadow-black/60
+    ">
+
+      {/* En-tête : icône de statut + badge + message optionnel */}
+      <div className="flex items-center gap-4 mb-7 pb-6 border-b border-slate-800">
+
+        {/* Icône de statut dans un carré arrondi coloré */}
+        <div className={`
+          w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0
+          ${valid
+            ? "bg-emerald-950 border border-emerald-900"
+            : "bg-red-950 border border-red-900"
+          }
+        `}>
+          {valid ? "✅" : "❌"}
+        </div>
+
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-mono mb-1">
+            Verification result
+          </p>
+          <StatusBadge valid={valid} cert={cert} />
+        </div>
+
+        {/* Message optionnel aligné à droite */}
+        {message && (
+          <p className="ml-auto text-xs text-slate-500 italic">{message}</p>
+        )}
+      </div>
+
+      {/* Cas : aucun certificat trouvé */}
+      {!cert && (
+        <p className="text-center text-slate-600 py-10 text-sm font-mono tracking-wide">
+          No data available for this code.
+        </p>
+      )}
+
+      {/* Cas : certificat trouvé — grille 3 colonnes */}
+      {cert && (
+        <div className="grid grid-cols-1 sm:grid-cols-[88px_1fr_120px] gap-6 items-start">
+
+          {/* Colonne 1 : image du badge ou fallback emoji ---*/}
+          <div className="flex flex-col items-center gap-3">
+            {cert.badgeUrl ? (
+              <img
+                src={cert.badgeUrl}
+                alt="Certificate badge"
+                className="w-20 h-20 object-contain rounded-xl border border-slate-800 bg-slate-900 p-2"
+              />
+            ) : (
+              // Fallback si pas d'image de badge disponible
+              <div className="w-20 h-20 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-3xl">
+                🏅
+              </div>
+            )}
+            <p className="text-[10px] font-mono text-slate-500 text-center leading-relaxed">
+              {cert.certificationName}
+            </p>
+          </div>
+
+          {/* Colonne 2 : champs textuels du certificat */}
+          <div className="space-y-4">
+            <Field label="Recipient" value={cert.recipientName} />
+            <Field label="Email" value={cert.recipientEmail} />
+            <Field label="Issued on" value={formatDate(cert.issuedAt)} />
+            {/* Date d'expiration affichée seulement si le champ existe */}
+            {cert.expiresAt && (
+              <Field label="Expires on" value={formatDate(cert.expiresAt)} />
+            )}
+            {/* Code de vérification en monospace indigo pour le faire ressortir */}
+            <Field label="Code" value={cert.verifyCode} mono />
+          </div>
+
+          {/* Colonne 3 : QR code avec logo du badge en center overlay */}
+          <CertQRCode
+            verifyCode={cert.verifyCode}
+            logoUrl={cert.badgeUrl}   // réutilise le badge comme logo du QR
+          />
+        </div>
+      )}
+    </div>
+  );
+}

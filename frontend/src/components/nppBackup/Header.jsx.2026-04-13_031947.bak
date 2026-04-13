@@ -1,0 +1,110 @@
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
+
+export default function Header() {
+  const { authed, logout } = useAuth();
+
+  // --- Déconnexion + notification toast ---
+  function handleLogout() {
+    logout();
+    toast.success("Signed out");
+  }
+
+  return (
+    <header className="
+      sticky top-0 z-50
+      bg-[#0d0f14] border-b border-slate-800
+    ">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+
+        {/* Logo — icône verrou + nom de l'app en monospace */}
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <div className="
+            w-8 h-8 rounded-lg flex items-center justify-center text-base
+            bg-indigo-950 border border-indigo-900
+            group-hover:border-indigo-700 transition-colors
+          ">
+            🔐
+          </div>
+          <span className="
+            font-mono font-bold text-base tracking-tight
+            text-slate-100 group-hover:text-indigo-400 transition-colors
+          ">
+            CertVerify by HCLTech
+          </span>
+        </Link>
+
+        {/* Navigation principale */}
+        <nav className="flex items-center gap-1 text-sm font-medium">
+
+          {/* Lien Verify — toujours visible */}
+          <Link
+            to="/"
+            className="
+              px-3 py-1.5 rounded-lg font-mono text-xs tracking-wide
+              text-slate-400 hover:text-slate-100 hover:bg-slate-800
+              transition-colors
+            "
+          >
+            Verify
+          </Link>
+
+          {/* Liens réservés aux admins authentifiés */}
+          {authed ? (
+            <>
+              <Link
+                to="/admin"
+                className="
+                  px-3 py-1.5 rounded-lg font-mono text-xs tracking-wide
+                  text-slate-400 hover:text-slate-100 hover:bg-slate-800
+                  transition-colors
+                "
+              >
+                Dashboard
+              </Link>
+
+              <Link
+                to="/admin/templates"
+                className="
+                  px-3 py-1.5 rounded-lg font-mono text-xs tracking-wide
+                  text-slate-400 hover:text-slate-100 hover:bg-slate-800
+                  transition-colors
+                "
+              >
+                Certifications
+              </Link>
+
+              {/* Séparateur visuel avant le bouton de déconnexion */}
+              <div className="w-px h-5 bg-slate-800 mx-1" />
+
+              <button
+                onClick={handleLogout}
+                className="
+                  px-3 py-1.5 rounded-lg font-mono text-xs tracking-wide
+                  text-red-500 border border-red-900
+                  hover:bg-red-950 hover:text-red-400
+                  transition-colors
+                "
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            // Bouton Admin — indigo pour le distinguer des liens nav
+            <Link
+              to="/admin/login"
+              className=" 
+                hidden ml-1 px-4 py-1.5 rounded-lg font-mono text-xs tracking-wide
+                bg-indigo-600 text-white border border-indigo-500
+                hover:bg-indigo-500 transition-colors
+              "
+            >
+              Admin
+            </Link>
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+}

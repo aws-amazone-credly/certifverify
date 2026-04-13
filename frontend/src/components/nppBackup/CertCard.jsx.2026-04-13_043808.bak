@@ -1,0 +1,305 @@
+import { useEffect, useRef } from "react";
+import QRCodeStyling from "qr-code-styling";
+
+// --- Couleurs AWS officielles ---
+const AWS_NAVY  = "#232f3e";
+const AWS_ORANGE = "#ff9900";
+
+// --- Construit le payload texte encodé dans le QR (infos du détenteur) ---
+function buildQRPayload(cert) {
+  const lines = [
+    "AWS CERTIFICATION",
+    `Holder:  ${cert.recipientName}`,
+    `Email:   ${cert.recipientEmail}`,
+    `Cert:    ${cert.certificationName}`,
+    `Issued:  ${formatDate(cert.issuedAt)}`,
+    cert.expiresAt ? `Expires: ${formatDate(cert.expiresAt)}` : null,
+    `Code:    ${cert.verifyCode}`,
+  ].filter(Boolean).join("\n");
+  return lines;
+}
+
+// --- Formate un timestamp Firestore ou une date JS en date lisible ---
+function formatDate(val) {
+  if (!val) return "—";
+  const d = val?.toDate
+    ? val.toDate()
+    : new Date(val._seconds ? val._seconds * 1000 : val);
+  return d.toLocaleDateString("en-US", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+// --- Détermine le statut texte selon les données du certificat ---
+function resolveStatus(valid, cert) {
+  if (!valid && cert?.status === "revoked") return "revoked";
+  if (!valid && cert?.expiresAt)            return "expired";
+  if (!valid)                               return "not_found";
+  return "valid";
+}
+
+// --- Pill de statut style Credly ---
+function StatusPill({ valid, cert }) {
+  const status = resolveStatus(valid, cert);
+  const styles = {
+    valid:     { bg: "#e6f4ea", color: "#1a7a30", dot: "#1a7a30", label: "Active"    },
+    expired:   { bg: "#fff3e0", color: "#b45309", dot: "#b45309", label: "Expired"   },
+    revoked:   { bg: "#fde8e8", color: "#b91c1c", dot: "#b91c1c", label: "Revoked"   },
+    not_found: { bg: "#f3f3f3", color: "#555",    dot: "#999",    label: "Not Found" },
+  }[status];
+
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "3px 10px", borderRadius: 999,
+      background: styles.bg, color: styles.color,
+      fontSize: 11, fontWeight: 700, letterSpacing: ".04em",
+      border: `1px solid ${styles.dot}33`,
+    }}>
+      {/* Dot indicateur de statut */}
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: styles.dot, flexShrink: 0 }} />
+      {styles.label}
+    </span>
+  );
+}
+
+// --- QR Code encodant les infos du détenteur, style AWS (noir + orange) ---
+// --- Composant QR Code encodant les infos du détenteur (pas d'URL) ---
+function CertQRCode({ cert, logoUrl }) {
+  const containerRef = useRef(null);
+  const qrInstanceRef = useRef(null);
+
+  useEffect(() => {
+    // Payload texte brut — pas d'URL, infos du détenteur uniquement
+    const payload = buildQRPayload(cert);
+
+    // Taille augmentée à 160x160 pour une meilleure lisibilité au scan
+    qrInstanceRef.current = new QRCodeStyling({
+      width: 160,
+      height: 160,
+      data: payload,
+      image: logoUrl || undefined,
+      dotsOptions: {
+        color: AWS_NAVY,        // navy AWS pour les points du QR
+        type: "rounded",
+      },
+      cornersSquareOptions: {
+        color: AWS_NAVY,        // navy pour les carrés de coin
+        type: "extra-rounded",
+      },
+      cornersDotOptions: {
+        color: AWS_ORANGE,      // orange AWS pour les points de coin (signature)
+      },
+      backgroundOptions: {
+        color: "#f9f9f9",       // fond gris très léger comme Credly
+      },
+      imageOptions: {
+        crossOrigin: "anonymous",
+        margin: 4,
+        imageSize: 0.28,
+      },
+    });
+
+    // Injection dans le DOM
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+      qrInstanceRef.current.append(containerRef.current);
+    }
+  }, [cert, logoUrl]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      {/* Conteneur agrandi pour accueillir le QR 160x160 */}
+      <div
+        ref={containerRef}
+        style={{
+          background: "#f9f9f9",
+          border: "1px solid #e5e5e5",
+          borderRadius: 8,
+          padding: 8,
+          width: 176,
+          height: 176,
+        }}
+      />
+      <p style={{ fontSize: 9, color: "#999", textTransform: "uppercase", letterSpacing: ".06em" }}>
+        Scan to verify
+      </p>
+    </div>
+  );
+}
+
+// --- Ligne label / valeur réutilisable ---
+function Field({ label, value, mono = false }) {
+  return (
+    <div>
+      <p style={{
+        fontSize: 10, textTransform: "uppercase", letterSpacing: ".1em",
+        color: "#888", marginBottom: 3, fontWeight: 600,
+      }}>
+        {label}
+      </p>
+      <p style={{
+        fontSize: 13, color: mono ? "#0073bb" : "#111", fontWeight: 500,
+        fontFamily: mono ? "monospace" : "inherit", letterSpacing: mono ? ".04em" : "inherit",
+      }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// --- Carte principale — clone Credly style AWS ---
+export default function CertCard({ result }) {
+  const { valid, cert, message } = result;
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", fontFamily: "'Noto Sans', sans-serif" }}>
+
+      {/* Barre supérieure AWS style Credly header */}
+      <div style={{
+        background: AWS_NAVY, height: 48, display: "flex", alignItems: "center",
+        padding: "0 24px", gap: 8, borderRadius: "8px 8px 0 0",
+      }}>
+        <span style={{ color: AWS_ORANGE, fontWeight: 700, fontSize: 17, letterSpacing: "-.3px" }}>
+          aws
+        </span>
+        <span style={{ color: "#ccc", fontSize: 12 }}>Training &amp; Certification</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "#aaa" }}>Powered by Credly</span>
+      </div>
+
+      {/* Corps de la carte */}
+      <div style={{ background: "#fff", border: "1px solid #ddd", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+
+        {/* Hero : fond navy + badge + infos principales */}
+        <div style={{
+          background: "linear-gradient(135deg, #232f3e 0%, #37475a 100%)",
+          padding: "32px 28px 24px",
+          display: "flex", gap: 24, alignItems: "flex-start",
+          borderBottom: `3px solid ${AWS_ORANGE}`,  // ligne orange signature AWS
+        }}>
+          {/* Colonne badge */}
+          <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            {cert?.badgeUrl ? (
+              <img
+                src={cert.badgeUrl}
+                alt="AWS badge"
+                style={{ width: 100, height: 100, objectFit: "contain", background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 4px 20px rgba(0,0,0,.3)" }}
+              />
+            ) : (
+              // Fallback hexagone emoji si pas de badge image
+              <div style={{
+                width: 100, height: 100, background: "#fff", borderRadius: 14,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 48, boxShadow: "0 4px 20px rgba(0,0,0,.3)",
+              }}>
+                🏅
+              </div>
+            )}
+            <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>
+              Issued by <strong style={{ color: AWS_ORANGE }}>AWS</strong>
+            </span>
+          </div>
+
+          {/* Infos principales du certificat */}
+          <div style={{ flex: 1 }}>
+            {/* Tag catégorie orange */}
+            <span style={{
+              display: "inline-block", background: AWS_ORANGE, color: AWS_NAVY,
+              fontSize: 10, fontWeight: 700, letterSpacing: ".08em",
+              padding: "2px 8px", borderRadius: 3, textTransform: "uppercase", marginBottom: 8,
+            }}>
+              AWS Certification
+            </span>
+
+            {/* Nom de la certification */}
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "#fff", lineHeight: 1.3, marginBottom: 4 }}>
+              {cert?.certificationName || "Certificate"}
+            </h2>
+            <p style={{ fontSize: 12, color: "#aaa", marginBottom: 14 }}>
+              Amazon Web Services Training and Certification
+            </p>
+
+            {/* Séparateur subtil */}
+            <div style={{ height: 1, background: "rgba(255,255,255,.1)", marginBottom: 12 }} />
+
+            {/* Détenteur */}
+            {cert ? (
+              <>
+                <p style={{ fontSize: 13, color: "#e8e8e8", marginBottom: 2 }}>
+                  Awarded to:{" "}
+                  <strong style={{ color: AWS_ORANGE }}>{cert.recipientName}</strong>
+                </p>
+                <p style={{ fontSize: 12, color: "#999" }}>{cert.recipientEmail}</p>
+              </>
+            ) : (
+              // Cas : aucun certificat trouvé
+              <p style={{ fontSize: 13, color: "#f87171" }}>
+                {message || "No certificate found for this code."}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Grille des métadonnées + QR */}
+        {cert && (
+<div style={{
+  padding: "24px 28px",
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 200px",  // ← 130px → 200px
+  gap: 24,
+  borderBottom: "1px solid #eee",
+}}>
+
+            {/* Colonne 1 : statut + dates */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".1em", color: "#888", fontWeight: 600, marginBottom: 4 }}>
+                  Status
+                </p>
+                <StatusPill valid={valid} cert={cert} />
+              </div>
+              <Field label="Issued on"  value={formatDate(cert.issuedAt)} />
+              {cert.expiresAt && (
+                <Field label="Expires on" value={formatDate(cert.expiresAt)} />
+              )}
+            </div>
+
+            {/* Colonne 2 : code + infos complémentaires */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <Field label="Credential ID" value={cert.verifyCode} mono />
+              <Field label="Recipient"     value={cert.recipientName} />
+              <Field label="Email"         value={cert.recipientEmail} />
+            </div>
+
+            {/* Colonne 3 : QR code avec infos du détenteur encodées */}
+            <CertQRCode cert={cert} logoUrl={cert.badgeUrl} />
+          </div>
+        )}
+
+        {/* Pied de carte : branding + boutons share/download */}
+        <div style={{
+          padding: "12px 28px", background: "#fafafa",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <p style={{ fontSize: 11, color: "#999" }}>
+            Verified by <strong style={{ color: AWS_NAVY }}>Credly</strong> ·{" "}
+            <strong style={{ color: AWS_NAVY }}>Amazon Web Services</strong>
+          </p>
+          {/* Boutons d'action style Credly */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{
+              padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 600,
+              background: "#fff", color: AWS_NAVY, border: "1px solid #ccc", cursor: "pointer",
+            }}>
+              Share
+            </button>
+            <button style={{
+              padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 600,
+              background: AWS_ORANGE, color: AWS_NAVY, border: "none", cursor: "pointer",
+            }}>
+              Download
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
